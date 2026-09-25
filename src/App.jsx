@@ -28,11 +28,11 @@ export default function App() {
   const items = useMemo(() => Object.fromEntries(menu.flatMap((c) => c.items.map((i) => [i.id, i]))), [menu])
 
   async function onFile(e) {
-    const file = e.target.files?.[0]
-    if (!file) return
+    const files = Array.from(e.target.files || [])
+    if (!files.length) return
     setBusy(true); setError('')
     try {
-      const cats = await scanMenu(file)
+      const cats = await scanMenu(files)
       setMenu(cats.map((c) => ({ ...c, items: c.items.map((i) => ({ ...i, id: uid() })) })))
       setOrders({}); setTab('pedido')
     } catch (err) { setError(err.message) }
@@ -87,9 +87,9 @@ export default function App() {
         {tab === 'carta' && (
           <>
             <label className="block rounded-2xl border-2 border-dashed border-[#1f3a34]/40 bg-white p-6 text-center cursor-pointer">
-              <input type="file" accept="image/*" capture="environment" className="hidden" onChange={onFile} disabled={busy} />
-              <span className="font-semibold">{busy ? 'Leyendo la carta…' : 'Fotografiar o subir la carta'}</span>
-              <span className="block text-sm text-[#1c2421]/60 mt-1">Gemini extraerá categorías, platos y precios.</span>
+              <input type="file" accept="image/*" multiple className="hidden" onChange={onFile} disabled={busy} />
+              <span className="font-semibold">{busy ? 'Leyendo la carta…' : 'Subir foto(s) de la carta'}</span>
+              <span className="block text-sm text-[#1c2421]/60 mt-1">Si tiene varias páginas, selecciona todas a la vez. Gemini extraerá categorías, platos y precios.</span>
             </label>
             {error && <p className="text-red-700 bg-red-50 rounded-xl p-3 text-sm">{error}</p>}
             {menu.map((c) => (

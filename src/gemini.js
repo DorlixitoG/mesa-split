@@ -9,13 +9,15 @@ async function shrink(file) {
   return c.toDataURL('image/jpeg', 0.85).split(',')[1]
 }
 
-export async function scanMenu(file) {
-  const image = await shrink(file)
+// files: uno o varios (varias páginas/fotos de la misma carta)
+export async function scanMenu(files) {
+  const list = Array.isArray(files) ? files : [files]
+  const images = await Promise.all(list.map(shrink))
   const send = (code) =>
     fetch('/api/scan', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ image, mimeType: 'image/jpeg', code })
+      body: JSON.stringify({ images, mimeType: 'image/jpeg', code })
     })
 
   let res = await send(localStorage.getItem('code') || '')
