@@ -39,7 +39,7 @@ export default async function handler(req, res) {
   try {
     const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY })
     const r = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
+      model: 'gemini-3.6-flash',
       contents: [
         { inlineData: { mimeType: mimeType || 'image/jpeg', data: image } },
         { text: 'Extrae la carta de este restaurante: categorías, platos y precio numérico (sin símbolo de moneda ni separador de miles). Si un plato no tiene precio, usa 0.' }
