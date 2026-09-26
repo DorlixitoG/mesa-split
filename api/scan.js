@@ -42,7 +42,7 @@ export default async function handler(req, res) {
 
   try {
     const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY })
-    const r = await ai.models.generateContent({
+    const call = () => ai.models.generateContent({
       model: 'gemini-3.6-flash',
       contents: [
         ...list.map((data) => ({ inlineData: { mimeType: mimeType || 'image/jpeg', data } })),
@@ -50,9 +50,27 @@ export default async function handler(req, res) {
       ],
       config: { responseMimeType: 'application/json', responseSchema: schema }
     })
+
+    // Gemini a veces responde 503 (UNAVAILABLE) por saturación momentánea: reintentamos con espera creciente.
+    let r
+    for (let attempt = 0; ; attempt++) {
+      try {
+        r = await call()
+        break
+      } catch (e) {
+        const overloaded = e?.status === 503 || /UNAVAILABLE|overloaded|high demand/i.test(e?.message || '')
+        if (!overloaded || attempt === 2) throw e
+        await new Promise((res) => setTimeout(res, 800 * 2 ** attempt))
+      }
+    }
     res.status(200).json(JSON.parse(r.text))
   } catch (e) {
     console.error(e)
-    res.status(500).json({ error: 'No se pudo leer la carta. Intenta con otra foto.' })
+    const overloaded = e?.status === 503 || /UNAVAILABLE|overloaded|high demand/i.test(e?.message || '')
+    res.status(overloaded ? 503 : 500).json({
+      error: overloaded
+        ? 'Gemini está saturado en este momento. Espera unos segundos e inténtalo de nuevo.'
+        : 'No se pudo leer la carta. Intenta con otra foto.'
+    })
   }
 }
