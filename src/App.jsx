@@ -1,31 +1,31 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { scanMenu } from './gemini'
 
-const load = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d } catch { return d } }
 const money = (n) => n.toLocaleString('es-CO', { maximumFractionDigits: 0 })
 const uid = () => Math.random().toString(36).slice(2, 8)
+const norm = (s) => s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
 
 export default function App() {
   const [tab, setTab] = useState('carta')
-  const [menu, setMenu] = useState(() => load('menu', []))
-  const [people, setPeople] = useState(() => load('people', []))
-  const [orders, setOrders] = useState(() => load('orders', {})) // { personId: { itemId: qty } }
-  const [tax, setTax] = useState(() => load('tax', 8))
-  const [tip, setTip] = useState(() => load('tip', 10))
+  const [menu, setMenu] = useState([])
+  const [people, setPeople] = useState([])
+  const [orders, setOrders] = useState({}) // { personId: { itemId: qty } }
+  const [tax, setTax] = useState(8)
+  const [tip, setTip] = useState(10)
   const [active, setActive] = useState(null)
   const [name, setName] = useState('')
+  const [query, setQuery] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
 
-  useEffect(() => {
-    localStorage.setItem('menu', JSON.stringify(menu))
-    localStorage.setItem('people', JSON.stringify(people))
-    localStorage.setItem('orders', JSON.stringify(orders))
-    localStorage.setItem('tax', JSON.stringify(tax))
-    localStorage.setItem('tip', JSON.stringify(tip))
-  }, [menu, people, orders, tax, tip])
-
   const items = useMemo(() => Object.fromEntries(menu.flatMap((c) => c.items.map((i) => [i.id, i]))), [menu])
+  const filteredMenu = useMemo(() => {
+    const q = norm(query.trim())
+    if (!q) return menu
+    return menu
+      .map((c) => ({ ...c, items: c.items.filter((i) => norm(i.name).includes(q)) }))
+      .filter((c) => c.items.length)
+  }, [menu, query])
 
   async function onFile(e) {
     const files = Array.from(e.target.files || [])
@@ -118,7 +118,18 @@ export default function App() {
               ))}
             </div>
             {!people.length && <p className="text-center text-sm text-[#1c2421]/60">Añade a los integrantes de la mesa.</p>}
-            {active && menu.map((c) => (
+            {active && (
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Buscar plato…"
+                className="w-full rounded-xl px-4 py-3 bg-white outline-none focus:ring-2 ring-[#e8a33d]"
+              />
+            )}
+            {active && !filteredMenu.length && (
+              <p className="text-center text-sm text-[#1c2421]/60">Ningún plato coincide con "{query}".</p>
+            )}
+            {active && filteredMenu.map((c) => (
               <section key={c.name} className="bg-white rounded-2xl p-4">
                 <h2 className="font-bold mb-2">{c.name}</h2>
                 {c.items.map((i) => {
