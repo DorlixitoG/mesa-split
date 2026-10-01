@@ -1,22 +1,36 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { scanMenu } from './gemini'
 
 const money = (n) => n.toLocaleString('es-CO', { maximumFractionDigits: 0 })
 const uid = () => Math.random().toString(36).slice(2, 8)
 const norm = (s) => s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+const load = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d } catch { return d } }
 
 export default function App() {
   const [tab, setTab] = useState('carta')
-  const [menu, setMenu] = useState([])
-  const [people, setPeople] = useState([])
-  const [orders, setOrders] = useState({}) // { personId: { itemId: qty } }
-  const [tax, setTax] = useState(8)
-  const [tip, setTip] = useState(10)
+  const [menu, setMenu] = useState(() => load('menu', []))
+  const [people, setPeople] = useState(() => load('people', []))
+  const [orders, setOrders] = useState(() => load('orders', {})) // { personId: { itemId: qty } }
+  const [tax, setTax] = useState(() => load('tax', 8))
+  const [tip, setTip] = useState(() => load('tip', 10))
   const [active, setActive] = useState(null)
   const [name, setName] = useState('')
   const [query, setQuery] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+
+  useEffect(() => {
+    localStorage.setItem('menu', JSON.stringify(menu))
+    localStorage.setItem('people', JSON.stringify(people))
+    localStorage.setItem('orders', JSON.stringify(orders))
+    localStorage.setItem('tax', JSON.stringify(tax))
+    localStorage.setItem('tip', JSON.stringify(tip))
+  }, [menu, people, orders, tax, tip])
+
+  function resetAll() {
+    if (!window.confirm('¿Borrar la carta, los integrantes y todos los pedidos? Esta acción no se puede deshacer.')) return
+    setMenu([]); setPeople([]); setOrders({}); setTax(8); setTip(10); setActive(null); setQuery(''); setTab('carta')
+  }
 
   const items = useMemo(() => Object.fromEntries(menu.flatMap((c) => c.items.map((i) => [i.id, i]))), [menu])
   const filteredMenu = useMemo(() => {
@@ -75,7 +89,12 @@ export default function App() {
   return (
     <div className="min-h-screen pb-24" style={{ paddingTop: 'env(safe-area-inset-top)' }}>
       <header className="bg-[#1f3a34] text-white px-5 pt-5 pb-4">
-        <h1 className="text-2xl font-bold">MesaSplit</h1>
+        <div className="flex items-center justify-between">
+          <h1 className="text-2xl font-bold">MesaSplit</h1>
+          {(menu.length > 0 || people.length > 0) && (
+            <button onClick={resetAll} className="text-xs text-white/70 underline underline-offset-2">Borrar todo</button>
+          )}
+        </div>
         <nav className="flex gap-2 mt-3">
           {[['carta', 'Carta'], ['pedido', 'Pedido'], ['resumen', 'Resumen']].map(([k, l]) => (
             <button key={k} onClick={() => setTab(k)} className={chip(tab === k)}>{l}</button>
