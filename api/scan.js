@@ -44,12 +44,10 @@ export default async function handler(req, res) {
   if (list.length > 6)
     return res.status(400).json({ error: "Máximo 6 fotos a la vez" });
   if (list.reduce((s, i) => s + i.length, 0) > 4_000_000)
-    return res
-      .status(400)
-      .json({
-        error:
-          "Las fotos pesan demasiado juntas, prueba con menos o de menor resolución",
-      });
+    return res.status(400).json({
+      error:
+        "Las fotos pesan demasiado juntas, prueba con menos o de menor resolución",
+    });
 
   try {
     const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
@@ -72,11 +70,16 @@ export default async function handler(req, res) {
     const isOverloaded = (e) =>
       e?.status === 503 ||
       /UNAVAILABLE|overloaded|high demand/i.test(e?.message || "");
+    const isQuota = (e) =>
+      e?.status === 429 ||
+      /RESOURCE_EXHAUSTED|exceeded your current quota/i.test(e?.message || "");
 
-    // Gemini a veces responde 503 (UNAVAILABLE) por saturación momentánea: reintentamos,
-    // y si sigue caído, probamos con un modelo de respaldo más liviano.
+    // 503 = saturación momentánea → reintentamos el mismo modelo.
+    // 429 = se acabó la cuota gratis del día para ese modelo → pasamos directo al de respaldo, sin reintentar.
     const models = ["gemini-3.6-flash", "gemini-3.5-flash"];
-    let r, lastErr;
+    let r,
+      lastErr,
+      quotaHit = false;
     outer: for (const model of models) {
       for (let attempt = 0; attempt < 3; attempt++) {
         try {
@@ -84,22 +87,39 @@ export default async function handler(req, res) {
           break outer;
         } catch (e) {
           lastErr = e;
+          if (isQuota(e)) {
+            quotaHit = true;
+            break;
+          }
           if (!isOverloaded(e)) throw e;
           await new Promise((res) => setTimeout(res, 1000 * 2 ** attempt));
         }
       }
     }
-    if (!r) throw lastErr;
+    if (!r) {
+      if (quotaHit) {
+        const err = new Error("quota");
+        err.isQuota = true;
+        throw err;
+      }
+      throw lastErr;
+    }
     res.status(200).json(JSON.parse(r.text));
   } catch (e) {
     console.error(e);
     const overloaded =
       e?.status === 503 ||
       /UNAVAILABLE|overloaded|high demand/i.test(e?.message || "");
-    res.status(overloaded ? 503 : 500).json({
-      error: overloaded
-        ? "Gemini está saturado en este momento. Espera unos segundos e inténtalo de nuevo."
-        : "No se pudo leer la carta. Intenta con otra foto.",
+    const quota =
+      e?.isQuota ||
+      e?.status === 429 ||
+      /RESOURCE_EXHAUSTED|exceeded your current quota/i.test(e?.message || "");
+    res.status(quota ? 429 : overloaded ? 503 : 500).json({
+      error: quota
+        ? "Ya usaste las peticiones gratis de Gemini por hoy (el nivel gratuito permite unas pocas al día por modelo). Espera a que se reinicie la cuota o activa facturación en Google AI Studio para tener más margen."
+        : overloaded
+          ? "Gemini está saturado en este momento. Espera unos segundos e inténtalo de nuevo."
+          : "No se pudo leer la carta. Intenta con otra foto.",
     });
   }
 }
